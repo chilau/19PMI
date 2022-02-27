@@ -1,0 +1,6 @@
+{
+    "db_path": "/opt/data/conversations.db",
+    "server": {
+        "port": 8085
+    }
+}
