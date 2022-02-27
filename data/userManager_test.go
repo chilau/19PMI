@@ -1,4 +1,4 @@
-package user
+package data
 
 import (
 	"github.com/stretchr/testify/assert"
@@ -6,49 +6,49 @@ import (
 )
 
 func TestAddUser(t *testing.T) {
-	manager := GetUsersManager()
+	manager := getUsersManager()
 	assert.NotNil(t, manager)
 
-	manager.Clean()
+	manager.clean()
 
 	newUser := &User{
 		Name:     "UserName",
 		LastName: "UserLastName",
 	}
 
-	userCount := manager.GetCount()
+	userCount := manager.getCount()
 	assert.Equal(t, 0, userCount)
 
-	userId, err := manager.Add(newUser)
+	userId, err := manager.add(newUser)
 	assert.Nil(t, err)
 	assert.NotEmpty(t, userId)
 
-	userCount = manager.GetCount()
+	userCount = manager.getCount()
 	assert.Equal(t, 1, userCount)
 }
 
 func TestGetUser(t *testing.T) {
-	manager := GetUsersManager()
+	manager := getUsersManager()
 	assert.NotNil(t, manager)
 
-	manager.Clean()
+	manager.clean()
 
 	newUser := &User{
 		Name:     "UserName",
 		LastName: "UserLastName",
 	}
 
-	userCount := manager.GetCount()
+	userCount := manager.getCount()
 	assert.Equal(t, 0, userCount)
 
-	userId, err := manager.Add(newUser)
+	userId, err := manager.add(newUser)
 	assert.Nil(t, err)
 	assert.NotEmpty(t, userId)
 
-	userCount = manager.GetCount()
+	userCount = manager.getCount()
 	assert.Equal(t, 1, userCount)
 
-	user, err := manager.Get(userId)
+	user, err := manager.get(userId)
 	assert.Nil(t, err)
 	assert.Equal(t, "UserName", user.Name)
 	assert.Equal(t, "UserLastName", user.LastName)

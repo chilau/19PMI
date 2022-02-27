@@ -2,6 +2,7 @@ package main
 
 import (
 	"19PMI/19PMI/config"
+	"19PMI/19PMI/data"
 	"19PMI/19PMI/logs"
 	"19PMI/19PMI/service"
 	"flag"
@@ -41,6 +42,9 @@ func init() {
 
 func main() {
 	go func() {
+		manager := data.GetManager()
+		manager.Init()
+
 		webService := service.GetWebService()
 		err := webService.Run()
 		if err != nil {

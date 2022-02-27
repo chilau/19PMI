@@ -11,7 +11,7 @@ import (
 var logger *logs.Logger
 
 type ApplicationConfig struct {
-	DBPath       string        `json:"db_path" default:"/opt/data/conversations.db"`
+	DBPath       string        `json:"db_path" default:"/opt/data/source.db"`
 	ServerConfig *ServerConfig `json:"server" required:"true"`
 }
 

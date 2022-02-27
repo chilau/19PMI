@@ -1,4 +1,4 @@
-package user
+package data
 
 import (
 	"19PMI/19PMI/logs"
@@ -7,11 +7,12 @@ import (
 	"sync"
 )
 
-type UsersManager struct {
+type usersManager struct {
 	logger *logs.Logger
 	users  map[string]*User
 
 	// Signals
+	initTaskCh     chan *addTask
 	addTaskCh      chan *addTask
 	getTaskCh      chan *getTask
 	updateTaskCh   chan *updateTask
@@ -58,7 +59,20 @@ type cleanTask struct {
 	done chan interface{}
 }
 
-func (m *UsersManager) Add(user *User) (userId string, err error) {
+func (m *usersManager) initClient(user *User) {
+	responseCh := make(chan *addTaskResponse, 1)
+	task := &addTask{
+		user:   user,
+		result: responseCh,
+	}
+	m.initTaskCh <- task
+
+	<-responseCh
+
+	return
+}
+
+func (m *usersManager) add(user *User) (userId string, err error) {
 	responseCh := make(chan *addTaskResponse, 1)
 	task := &addTask{
 		user:   user,
@@ -73,7 +87,7 @@ func (m *UsersManager) Add(user *User) (userId string, err error) {
 	return
 }
 
-func (m *UsersManager) Get(userId string) (user *User, err error) {
+func (m *usersManager) get(userId string) (user *User, err error) {
 	responseCh := make(chan *getTaskResponse, 1)
 	defer close(responseCh)
 
@@ -90,7 +104,7 @@ func (m *UsersManager) Get(userId string) (user *User, err error) {
 	return
 }
 
-func (m *UsersManager) Update(user *User) (ok bool) {
+func (m *usersManager) update(user *User) (ok bool) {
 	responseCh := make(chan bool, 1)
 	defer close(responseCh)
 
@@ -105,7 +119,7 @@ func (m *UsersManager) Update(user *User) (ok bool) {
 	return
 }
 
-func (m *UsersManager) Remove(userId string) (ok bool) {
+func (m *usersManager) remove(userId string) (ok bool) {
 	responseCh := make(chan bool, 1)
 	defer close(responseCh)
 
@@ -120,7 +134,7 @@ func (m *UsersManager) Remove(userId string) (ok bool) {
 	return
 }
 
-func (m *UsersManager) GetCount() (count int) {
+func (m *usersManager) getCount() (count int) {
 	responseCh := make(chan int, 1)
 	defer close(responseCh)
 
@@ -134,7 +148,7 @@ func (m *UsersManager) GetCount() (count int) {
 	return
 }
 
-func (m *UsersManager) Clean() {
+func (m *usersManager) clean() {
 	responseCh := make(chan interface{}, 1)
 	defer close(responseCh)
 
@@ -151,44 +165,53 @@ func (m *UsersManager) Clean() {
 /**
  * Setup singleton
  */
-var pMutex = &sync.Mutex{}
-var mInstance *UsersManager
+var uMutex = &sync.Mutex{}
+var uInstance *usersManager
 
-func GetUsersManager() *UsersManager {
-	if mInstance == nil {
-		pMutex.Lock()
-		if mInstance == nil {
-			mInstance = &UsersManager{}
-			mInstance.init()
+func getUsersManager() *usersManager {
+	if uInstance == nil {
+		uMutex.Lock()
+		if uInstance == nil {
+			uInstance = &usersManager{}
+			uInstance.init()
 		}
-		pMutex.Unlock()
+		uMutex.Unlock()
 	}
 
-	return mInstance
+	return uInstance
 }
 
-func (m *UsersManager) init() {
+func (m *usersManager) init() {
 	usersManagerLogger := logs.GetLogger().SetSource("UsersManager")
 	m.logger = &usersManagerLogger
 
 	// Pool
 	m.users = make(map[string]*User, 65536)
 	// Signals
-	m.addTaskCh = make(chan *addTask)
-	m.getTaskCh = make(chan *getTask)
-	m.updateTaskCh = make(chan *updateTask)
-	m.removeTaskCh = make(chan *removeTask)
-	m.getCountTaskCh = make(chan *getCountTask)
-	m.cleanTaskCh = make(chan *cleanTask)
+	m.initTaskCh = make(chan *addTask, 128)
+	m.addTaskCh = make(chan *addTask, 128)
+	m.getTaskCh = make(chan *getTask, 128)
+	m.updateTaskCh = make(chan *updateTask, 128)
+	m.removeTaskCh = make(chan *removeTask, 128)
+	m.getCountTaskCh = make(chan *getCountTask, 128)
+	m.cleanTaskCh = make(chan *cleanTask, 128)
 
 	// Start pool
 	go m.run()
+	go m.initClients()
+}
+
+func (m *usersManager) initClients() {
+	initCh := getDataProvider().getClientsInitChan()
+	for client := range initCh {
+		m.initClient(client)
+	}
 }
 
 /* *******************
  * ThreadSafe Map pool
  * *******************/
-func (m *UsersManager) run() {
+func (m *usersManager) run() {
 	m.logger.Info().Msg(
 		"started",
 	)
@@ -201,6 +224,19 @@ func (m *UsersManager) run() {
 
 	for {
 		select {
+		case task := <-m.initTaskCh:
+			m.users[task.user.Id] = task.user
+			task.result <- &addTaskResponse{
+				userId: task.user.Id,
+				err:    nil,
+			}
+
+			m.logger.Info().Msgf(
+				"user added from dataBase. UserId:%s PoolSize:%d",
+				task.user.Id,
+				len(m.users),
+			)
+
 		case task := <-m.addTaskCh:
 			task.user.Id = uniq.UUID()
 
@@ -209,6 +245,9 @@ func (m *UsersManager) run() {
 				userId: task.user.Id,
 				err:    nil,
 			}
+
+			dataProvider := getDataProvider()
+			dataProvider.addUser(task.user)
 
 			m.logger.Info().Msgf(
 				"user added. UserId:%s PoolSize:%d",
@@ -256,6 +295,9 @@ func (m *UsersManager) run() {
 
 			task.ok <- true
 
+			dataProvider := getDataProvider()
+			dataProvider.updateUser(task.user)
+
 			m.logger.Info().Msgf(
 				"user updated. UserId:%s",
 				task.user.Id,
@@ -271,6 +313,9 @@ func (m *UsersManager) run() {
 
 			delete(m.users, task.userId)
 			task.ok <- true
+
+			dataProvider := getDataProvider()
+			dataProvider.removeUser(task.userId)
 
 			m.logger.Info().Msgf(
 				"user removed. UserId:%s PoolSize:%d",

@@ -3,8 +3,8 @@ package service
 import (
 	"19PMI/19PMI/cmd/api/swaggerui"
 	"19PMI/19PMI/config"
+	"19PMI/19PMI/data"
 	"19PMI/19PMI/logs"
-	"19PMI/19PMI/user"
 	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
@@ -24,7 +24,7 @@ type CreateUserResponse struct {
 }
 
 type GetUserResponse struct {
-	User *user.User `json:"user"`
+	User *data.User `json:"user"`
 }
 
 type Response struct {
@@ -70,7 +70,7 @@ func (s *WebService) createUser(ginContext *gin.Context) {
 
 	s.logger.Info().Msg("create user request received")
 
-	var newUser user.User
+	var newUser data.User
 	err := json.Unmarshal(body, &newUser)
 	if err != nil {
 		ginContext.JSON(
@@ -81,7 +81,7 @@ func (s *WebService) createUser(ginContext *gin.Context) {
 		)
 	}
 
-	manager := user.GetUsersManager()
+	manager := data.GetManager()
 	userId, err := manager.Add(&newUser)
 
 	if err != nil {
@@ -109,7 +109,7 @@ func (s *WebService) createUser(ginContext *gin.Context) {
 func (s *WebService) getUser(ginContext *gin.Context) {
 	var userID = ginContext.Params.ByName("userId")
 
-	manager := user.GetUsersManager()
+	manager := data.GetManager()
 	requiredUser, err := manager.Get(userID)
 
 	if err != nil {
@@ -137,7 +137,7 @@ func (s *WebService) updateUser(ginContext *gin.Context) {
 
 	s.logger.Info().Msg("update user request received")
 
-	var requiredUser user.User
+	var requiredUser data.User
 	err := json.Unmarshal(body, &requiredUser)
 	if err != nil {
 		ginContext.JSON(
@@ -148,16 +148,16 @@ func (s *WebService) updateUser(ginContext *gin.Context) {
 		)
 	}
 
-	manager := user.GetUsersManager()
-	ok := manager.Update(&requiredUser)
-
-	if !ok {
+	manager := data.GetManager()
+	err = manager.Update(&requiredUser)
+	if err != nil {
 		ginContext.JSON(
 			http.StatusInternalServerError,
 			&Response{
 				Message: fmt.Sprintf(
-					"user not updated. UserId: %s",
+					"user not updated. UserId:%s, Error:%s",
 					requiredUser.Id,
+					err.Error(),
 				),
 			},
 		)
@@ -179,16 +179,16 @@ func (s *WebService) updateUser(ginContext *gin.Context) {
 func (s *WebService) removeUser(ginContext *gin.Context) {
 	var userID = ginContext.Params.ByName("userId")
 
-	manager := user.GetUsersManager()
-	ok := manager.Remove(userID)
-
-	if !ok {
+	manager := data.GetManager()
+	err := manager.Remove(userID)
+	if err != nil {
 		ginContext.JSON(
 			http.StatusOK,
 			&Response{
 				Message: fmt.Sprintf(
-					"user not removed. UserId: %s",
+					"user not removed. UserId:%s, Error:%s",
 					userID,
+					err.Error(),
 				),
 			},
 		)
